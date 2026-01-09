@@ -1,0 +1,169 @@
+import { ConfigurationService } from '@ghostfolio/api/services/configuration/configuration.service';
+import { DataEnhancerInterface } from '@ghostfolio/api/services/data-provider/interfaces/data-enhancer.interface';
+import { Holding } from '@ghostfolio/common/interfaces';
+import { Country } from '@ghostfolio/common/interfaces/country.interface';
+import { Sector } from '@ghostfolio/common/interfaces/sector.interface';
+
+import { Injectable } from '@nestjs/common';
+import { SymbolProfile } from '@prisma/client';
+import { countries } from 'countries-list';
+
+@Injectable()
+export class TrackinsightMirrorDataEnhancerService implements DataEnhancerInterface {
+  private static countriesMapping = {
+    'Russian Federation': 'Russia'
+  };
+  private static holdingsWeightTreshold = 0.85;
+  private static sectorsMapping = {
+    'Consumer Discretionary': 'Consumer Cyclical',
+    'Consumer Defensive': 'Consumer Staples',
+    'Health Care': 'Healthcare',
+    'Information Technology': 'Technology'
+  };
+
+  public constructor(
+    private readonly configurationService: ConfigurationService
+  ) {}
+
+  public async enhance({
+    requestTimeout = this.configurationService.get('REQUEST_TIMEOUT'),
+    response,
+    symbol
+  }: {
+    requestTimeout?: number;
+    response: Partial<SymbolProfile>;
+    symbol: string;
+  }): Promise<Partial<SymbolProfile>> {
+    const baseUrl = this.configurationService.get('TRACKINSIGHT_MIRROR_URL');
+    if (!baseUrl) {
+      return response;
+    }
+    if (
+      !(
+        response.assetClass === 'EQUITY' &&
+        ['ETF', 'MUTUALFUND'].includes(response.assetSubClass)
+      )
+    ) {
+      return response;
+    }
+
+    const trackinsightSymbol = symbol;
+
+    if (!trackinsightSymbol) {
+      return response;
+    }
+
+    const profile = await fetch(`${baseUrl}/funds/${trackinsightSymbol}.json`, {
+      signal: AbortSignal.timeout(requestTimeout)
+    })
+      .then((res) => res.json())
+      .catch(() => {
+        return {};
+      });
+
+    const cusip = profile?.cusip;
+
+    if (cusip) {
+      response.cusip = cusip;
+    }
+
+    const isin = profile?.isins?.[0];
+
+    if (isin) {
+      response.isin = isin;
+    }
+
+    const holdings = await fetch(
+      `${baseUrl}/holdings/${trackinsightSymbol}.json`,
+      {
+        signal: AbortSignal.timeout(requestTimeout)
+      }
+    )
+      .then((res) => res.json())
+      .catch(() => {
+        return {};
+      });
+
+    if (
+      holdings?.weight <
+      TrackinsightMirrorDataEnhancerService.holdingsWeightTreshold
+    ) {
+      // Skip if data is inaccurate
+      return response;
+    }
+
+    if (
+      !response.countries ||
+      (response.countries as unknown as Country[]).length === 0
+    ) {
+      response.countries = [];
+
+      for (const [name, value] of Object.entries<any>(
+        holdings?.countries ?? {}
+      )) {
+        let countryCode: string;
+
+        for (const [code, country] of Object.entries(countries)) {
+          if (
+            country.name === name ||
+            country.name ===
+              TrackinsightMirrorDataEnhancerService.countriesMapping[name]
+          ) {
+            countryCode = code;
+            break;
+          }
+        }
+
+        response.countries.push({
+          code: countryCode,
+          weight: value.weight
+        });
+      }
+    }
+
+    if (
+      !response.holdings ||
+      (response.holdings as unknown as Holding[]).length === 0
+    ) {
+      response.holdings = [];
+
+      for (const { label, weight } of holdings?.topHoldings ?? []) {
+        if (label?.toLowerCase() === 'other') {
+          continue;
+        }
+
+        response.holdings.push({
+          weight,
+          name: label
+        });
+      }
+    }
+
+    if (
+      !response.sectors ||
+      (response.sectors as unknown as Sector[]).length === 0
+    ) {
+      response.sectors = [];
+
+      for (const [name, value] of Object.entries<any>(
+        holdings?.sectors ?? {}
+      )) {
+        response.sectors.push({
+          name:
+            TrackinsightMirrorDataEnhancerService.sectorsMapping[name] ?? name,
+          weight: value.weight
+        });
+      }
+    }
+
+    return Promise.resolve(response);
+  }
+
+  public getName() {
+    return 'TRACKINSIGHTMIRROR';
+  }
+
+  public getTestSymbol() {
+    return 'QQQ';
+  }
+}

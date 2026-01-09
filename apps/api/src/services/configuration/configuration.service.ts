@@ -106,7 +106,8 @@ export class ConfigurationService {
       TWITTER_ACCESS_TOKEN: str({ default: 'dummyAccessToken' }),
       TWITTER_ACCESS_TOKEN_SECRET: str({ default: 'dummyAccessTokenSecret' }),
       TWITTER_API_KEY: str({ default: 'dummyApiKey' }),
-      TWITTER_API_SECRET: str({ default: 'dummyApiSecret' })
+      TWITTER_API_SECRET: str({ default: 'dummyApiSecret' }),
+      TRACKINSIGHT_MIRROR_URL: str({ default: '' })
     });
   }
 
