@@ -11,7 +11,9 @@ import { countries } from 'countries-list';
 @Injectable()
 export class TrackinsightMirrorDataEnhancerService implements DataEnhancerInterface {
   private static countriesMapping = {
-    'Russian Federation': 'Russia'
+    'Russian Federation': 'Russia',
+    US: 'United States',
+    USA: 'United States'
   };
   private static holdingsWeightTreshold = 0.85;
   private static sectorsMapping = {
@@ -48,7 +50,6 @@ export class TrackinsightMirrorDataEnhancerService implements DataEnhancerInterf
     }
 
     const trackinsightSymbol = symbol;
-
     if (!trackinsightSymbol) {
       return response;
     }
