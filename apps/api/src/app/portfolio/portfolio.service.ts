@@ -2162,6 +2162,10 @@ export class PortfolioService {
         SymbolProfile,
         type
       } of ordersByAccount) {
+        if (SymbolProfile.assetClass === AssetClass.LIQUIDITY) {
+          // Skip cash positions as they are already included in the account balance
+          continue;
+        }
         const currentValueOfSymbolInBaseCurrency =
           getFactor(type) *
           quantity *
