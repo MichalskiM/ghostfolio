@@ -5,11 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## Unreleased
+## 2.231.0 - 2026-01-17
 
 ### Changed
 
 - Removed the deprecated platforms from the info service
+- Removed the deprecated activities from the endpoint `GET api/v1/portfolio/holding/:dataSource/:symbol`
+
+### Fixed
+
+- Fixed a numeric parsing error related to cash positions on the _X-ray_ page
+- Fixed the total fee calculation in the holding detail dialog related to activities in a custom currency
+- Fixed the total fee calculation in the summary related to activities in a custom currency
 
 ## 2.230.0 - 2026-01-14
 
