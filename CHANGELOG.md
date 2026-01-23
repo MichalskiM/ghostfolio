@@ -7,9 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Changed
+
+- Deprecated `transactionCount` in favor of `activitiesCount` in the portfolio calculator and service
+- Removed the deprecated `firstBuyDate` from the endpoint `GET api/v1/portfolio/holding/:dataSource/:symbol`
+
+## 2.232.0 - 2026-01-19
+
 ### Added
 
-- Extended the analysis page to include the total amount, change and performance with currency effects
+- Extended the analysis page to include the total amount, change and performance with currency effects (experimental)
 
 ### Changed
 
