@@ -7,10 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Added
+
+- Added the ability to fetch top holdings for ETF and mutual fund assets from _Yahoo Finance_
+
 ### Changed
 
+- Deprecated `transactionCount` in favor of `activitiesCount` in the endpoint `GET api/v1/admin`
+- Removed the deprecated `firstBuyDate` in the portfolio calculator
+
+## 2.234.0 - 2026-01-30
+
+### Changed
+
+- Improved the usability of the create asset profile dialog in the market data section of the admin control panel
+- Improved the language localization for Chinese (`zh`)
+- Improved the language localization for German (`de`)
+- Improved the language localization for Spanish (`es`)
+- Upgraded `angular` from version `21.0.6` to `21.1.1`
+- Upgraded `lodash` from version `4.17.21` to `4.17.23`
+- Upgraded `Nx` from version `22.3.3` to `22.4.1`
+- Upgraded `prettier` from version `3.8.0` to `3.8.1`
+
+## 2.233.0 - 2026-01-23
+
+### Changed
+
+- Deprecated `firstBuyDate` in favor of `dateOfFirstActivity` in the portfolio calculator
 - Deprecated `transactionCount` in favor of `activitiesCount` in the portfolio calculator and service
 - Removed the deprecated `firstBuyDate` from the endpoint `GET api/v1/portfolio/holding/:dataSource/:symbol`
+- Refreshed the cryptocurrencies list
+- Upgraded `prettier` from version `3.7.4` to `3.8.0`
 
 ## 2.232.0 - 2026-01-19
 
