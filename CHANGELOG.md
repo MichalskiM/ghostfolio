@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Changed
+
+- Upgraded `ngx-skeleton-loader` from version `11.3.0` to `12.0.0`
+- Upgraded `twitter-api-v2` from version `1.27.0` to `1.29.0`
+
+### Fixed
+
+- Fixed an issue in the annualized performance calculation
+
 ## 2.237.0 - 2026-02-08
 
 ### Changed
