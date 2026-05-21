@@ -11,6 +11,7 @@ import {
   ChangeDetectionStrategy,
   ChangeDetectorRef,
   Component,
+  DestroyRef,
   ElementRef,
   HostListener,
   Input,
@@ -22,6 +23,7 @@ import {
   ViewChildren,
   output
 } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormControl, FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -38,9 +40,9 @@ import {
   closeOutline,
   searchOutline
 } from 'ionicons/icons';
-import { isFunction } from 'lodash';
+import { isFunction, sample } from 'lodash';
 import { NgxSkeletonLoaderModule } from 'ngx-skeleton-loader';
-import { EMPTY, Observable, Subject, merge, of } from 'rxjs';
+import { EMPTY, Observable, merge, of } from 'rxjs';
 import {
   catchError,
   debounceTime,
@@ -48,7 +50,6 @@ import {
   map,
   scan,
   switchMap,
-  takeUntil,
   tap
 } from 'rxjs/operators';
 
@@ -105,14 +106,17 @@ export class GfAssistantComponent implements OnChanges, OnDestroy, OnInit {
   public dateRangeFormControl = new FormControl<string | null>(null);
   public dateRangeOptions: DateRangeOption[] = [];
   public holdings: PortfolioPosition[] = [];
+
   public isLoading = {
     accounts: false,
     assetProfiles: false,
     holdings: false,
     quickLinks: false
   };
+
   public isOpen = false;
-  public placeholder = $localize`Find account, holding or page...`;
+  public placeholder: string;
+
   public portfolioFilterFormControl = new FormControl<PortfolioFilterFormValue>(
     {
       account: null,
@@ -121,13 +125,16 @@ export class GfAssistantComponent implements OnChanges, OnDestroy, OnInit {
       tag: null
     }
   );
+
   public searchFormControl = new FormControl('');
+
   public searchResults: SearchResults = {
     accounts: [],
     assetProfiles: [],
     holdings: [],
     quickLinks: []
   };
+
   public tags: Filter[] = [];
 
   protected readonly closed = output<void>();
@@ -146,12 +153,12 @@ export class GfAssistantComponent implements OnChanges, OnDestroy, OnInit {
 
   private keyManager: FocusKeyManager<GfAssistantListItemComponent>;
   private preselectionTimeout: ReturnType<typeof setTimeout>;
-  private unsubscribeSubject = new Subject<void>();
 
   public constructor(
     private adminService: AdminService,
     private changeDetectorRef: ChangeDetectorRef,
-    private dataService: DataService
+    private dataService: DataService,
+    private destroyRef: DestroyRef
   ) {
     addIcons({ closeCircleOutline, closeOutline, searchOutline });
   }
@@ -188,13 +195,17 @@ export class GfAssistantComponent implements OnChanges, OnDestroy, OnInit {
   }
 
   public ngOnInit() {
-    this.assetClasses = Object.keys(AssetClass).map((assetClass) => {
-      return {
-        id: assetClass,
-        label: translate(assetClass),
-        type: 'ASSET_CLASS'
-      };
-    });
+    this.assetClasses = Object.keys(AssetClass)
+      .map((assetClass) => {
+        return {
+          id: assetClass,
+          label: translate(assetClass),
+          type: 'ASSET_CLASS'
+        } satisfies Filter;
+      })
+      .sort((a, b) => {
+        return a.label.localeCompare(b.label);
+      });
 
     this.searchFormControl.valueChanges
       .pipe(
@@ -333,7 +344,7 @@ export class GfAssistantComponent implements OnChanges, OnDestroy, OnInit {
             )
           );
         }),
-        takeUntil(this.unsubscribeSubject)
+        takeUntilDestroyed(this.destroyRef)
       )
       .subscribe({
         next: (searchResults) => {
@@ -434,12 +445,15 @@ export class GfAssistantComponent implements OnChanges, OnDestroy, OnInit {
         ?.filter(({ isUsed }) => {
           return isUsed;
         })
-        .map(({ id, name }) => {
+        ?.map(({ id, name }) => {
           return {
             id,
             label: translate(name),
             type: 'TAG'
-          };
+          } satisfies Filter;
+        })
+        ?.sort((a, b) => {
+          return a.label.localeCompare(b.label);
         }) ?? [];
   }
 
@@ -450,7 +464,15 @@ export class GfAssistantComponent implements OnChanges, OnDestroy, OnInit {
       holdings: true,
       quickLinks: true
     };
+
     this.keyManager = new FocusKeyManager(this.assistantListItems).withWrap();
+
+    this.placeholder = sample([
+      $localize`Find an account...`,
+      $localize`Find a holding...`,
+      $localize`Jump to a page...`
+    ]);
+
     this.searchResults = {
       accounts: [],
       assetProfiles: [],
@@ -463,6 +485,7 @@ export class GfAssistantComponent implements OnChanges, OnDestroy, OnInit {
     }
 
     this.searchFormControl.setValue('');
+
     setTimeout(() => {
       this.searchElement?.nativeElement?.focus();
     });
@@ -473,11 +496,12 @@ export class GfAssistantComponent implements OnChanges, OnDestroy, OnInit {
       holdings: false,
       quickLinks: false
     };
+
     this.setIsOpen(true);
 
     this.dataService
       .fetchPortfolioHoldings()
-      .pipe(takeUntil(this.unsubscribeSubject))
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(({ holdings }) => {
         this.holdings = holdings
           .filter(({ assetSubClass }) => {
@@ -556,9 +580,6 @@ export class GfAssistantComponent implements OnChanges, OnDestroy, OnInit {
     if (this.preselectionTimeout) {
       clearTimeout(this.preselectionTimeout);
     }
-
-    this.unsubscribeSubject.next();
-    this.unsubscribeSubject.complete();
   }
 
   private getCurrentAssistantListItem() {
@@ -643,7 +664,7 @@ export class GfAssistantComponent implements OnChanges, OnDestroy, OnInit {
             };
           });
         }),
-        takeUntil(this.unsubscribeSubject)
+        takeUntilDestroyed(this.destroyRef)
       );
   }
 
@@ -678,7 +699,7 @@ export class GfAssistantComponent implements OnChanges, OnDestroy, OnInit {
             }
           );
         }),
-        takeUntil(this.unsubscribeSubject)
+        takeUntilDestroyed(this.destroyRef)
       );
   }
 
@@ -710,14 +731,14 @@ export class GfAssistantComponent implements OnChanges, OnDestroy, OnInit {
             }
           );
         }),
-        takeUntil(this.unsubscribeSubject)
+        takeUntilDestroyed(this.destroyRef)
       );
   }
 
   private searchQuickLinks(aSearchTerm: string): SearchResultItem[] {
     const searchTerm = aSearchTerm.toLowerCase();
 
-    const allRoutes = Object.values(internalRoutes)
+    const allRoutes = Object.values<InternalRoute>(internalRoutes)
       .filter(({ excludeFromAssistant }) => {
         if (isFunction(excludeFromAssistant)) {
           return excludeFromAssistant(this.user);
@@ -725,13 +746,13 @@ export class GfAssistantComponent implements OnChanges, OnDestroy, OnInit {
 
         return !excludeFromAssistant;
       })
-      .reduce((acc, route) => {
+      .reduce<InternalRoute[]>((acc, route) => {
         acc.push(route);
         if (route.subRoutes) {
           acc.push(...Object.values(route.subRoutes));
         }
         return acc;
-      }, [] as InternalRoute[]);
+      }, []);
 
     const fuse = new Fuse(allRoutes, {
       keys: ['title'],

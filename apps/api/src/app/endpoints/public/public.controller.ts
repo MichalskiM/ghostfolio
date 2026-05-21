@@ -7,6 +7,7 @@ import { TransformDataSourceInResponseInterceptor } from '@ghostfolio/api/interc
 import { ConfigurationService } from '@ghostfolio/api/services/configuration/configuration.service';
 import { ExchangeRateDataService } from '@ghostfolio/api/services/exchange-rate-data/exchange-rate-data.service';
 import { DEFAULT_CURRENCY } from '@ghostfolio/common/config';
+import { SubscriptionType } from '@ghostfolio/common/enums';
 import { getSum } from '@ghostfolio/common/helper';
 import { PublicPortfolioResponse } from '@ghostfolio/common/interfaces';
 import type { RequestWithUser } from '@ghostfolio/common/types';
@@ -58,7 +59,7 @@ export class PublicController {
     });
 
     if (this.configurationService.get('ENABLE_FEATURE_SUBSCRIPTION')) {
-      hasDetails = user.subscription.type === 'Premium';
+      hasDetails = user.subscription.type === SubscriptionType.Premium;
     }
 
     const [
@@ -150,11 +151,11 @@ export class PublicController {
     };
 
     const totalValue = getSum(
-      Object.values(holdings).map(({ currency, marketPrice, quantity }) => {
+      Object.values(holdings).map(({ assetProfile, marketPrice, quantity }) => {
         return new Big(
           this.exchangeRateDataService.toCurrency(
             quantity * marketPrice,
-            currency,
+            assetProfile.currency,
             this.request.user?.settings?.settings.baseCurrency ??
               DEFAULT_CURRENCY
           )

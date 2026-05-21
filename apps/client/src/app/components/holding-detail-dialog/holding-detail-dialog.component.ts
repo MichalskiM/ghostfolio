@@ -1,5 +1,6 @@
 import { UserService } from '@ghostfolio/client/services/user/user.service';
 import {
+  DEFAULT_PAGE_SIZE,
   NUMERICAL_PRECISION_THRESHOLD_3_FIGURES,
   NUMERICAL_PRECISION_THRESHOLD_5_FIGURES,
   NUMERICAL_PRECISION_THRESHOLD_6_FIGURES
@@ -29,16 +30,16 @@ import { DataService } from '@ghostfolio/ui/services';
 import { GfTagsSelectorComponent } from '@ghostfolio/ui/tags-selector';
 import { GfValueComponent } from '@ghostfolio/ui/value';
 
-import { CommonModule } from '@angular/common';
 import {
   CUSTOM_ELEMENTS_SCHEMA,
   ChangeDetectionStrategy,
   ChangeDetectorRef,
   Component,
+  DestroyRef,
   Inject,
-  OnDestroy,
   OnInit
 } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, FormGroup, ReactiveFormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatChipsModule } from '@angular/material/chips';
@@ -48,6 +49,7 @@ import {
   MatDialogRef
 } from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
+import { PageEvent } from '@angular/material/paginator';
 import { SortDirection } from '@angular/material/sort';
 import { MatTableDataSource } from '@angular/material/table';
 import { MatTabsModule } from '@angular/material/tabs';
@@ -67,8 +69,7 @@ import {
   walletOutline
 } from 'ionicons/icons';
 import { NgxSkeletonLoaderModule } from 'ngx-skeleton-loader';
-import { Subject } from 'rxjs';
-import { switchMap, takeUntil } from 'rxjs/operators';
+import { switchMap } from 'rxjs/operators';
 
 import { HoldingDetailDialogParams } from './interfaces/interfaces';
 
@@ -76,7 +77,6 @@ import { HoldingDetailDialogParams } from './interfaces/interfaces';
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'd-flex flex-column h-100' },
   imports: [
-    CommonModule,
     GfAccountsTableComponent,
     GfActivitiesTableComponent,
     GfDataProviderCreditsComponent,
@@ -102,7 +102,7 @@ import { HoldingDetailDialogParams } from './interfaces/interfaces';
   styleUrls: ['./holding-detail-dialog.component.scss'],
   templateUrl: 'holding-detail-dialog.html'
 })
-export class GfHoldingDetailDialogComponent implements OnDestroy, OnInit {
+export class GfHoldingDetailDialogComponent implements OnInit {
   public activitiesCount: number;
   public accounts: Account[];
   public assetClass: string;
@@ -142,6 +142,8 @@ export class GfHoldingDetailDialogComponent implements OnDestroy, OnInit {
   public netPerformancePercentWithCurrencyEffectPrecision = 2;
   public netPerformanceWithCurrencyEffect: number;
   public netPerformanceWithCurrencyEffectPrecision = 2;
+  public pageIndex = 0;
+  public pageSize = DEFAULT_PAGE_SIZE;
   public quantity: number;
   public quantityPrecision = 2;
   public reportDataGlitchMail: string;
@@ -158,11 +160,10 @@ export class GfHoldingDetailDialogComponent implements OnDestroy, OnInit {
   public user: User;
   public value: number;
 
-  private unsubscribeSubject = new Subject<void>();
-
   public constructor(
     private changeDetectorRef: ChangeDetectorRef,
     private dataService: DataService,
+    private destroyRef: DestroyRef,
     public dialogRef: MatDialogRef<GfHoldingDetailDialogComponent>,
     @Inject(MAT_DIALOG_DATA) public data: HoldingDetailDialogParams,
     private formBuilder: FormBuilder,
@@ -181,10 +182,7 @@ export class GfHoldingDetailDialogComponent implements OnDestroy, OnInit {
   }
 
   public ngOnInit() {
-    const filters: Filter[] = [
-      { id: this.data.dataSource, type: 'DATA_SOURCE' },
-      { id: this.data.symbol, type: 'SYMBOL' }
-    ];
+    const filters = this.getActivityFilters();
 
     this.holdingForm = this.formBuilder.group({
       tags: [] as string[]
@@ -192,7 +190,7 @@ export class GfHoldingDetailDialogComponent implements OnDestroy, OnInit {
 
     this.holdingForm
       .get('tags')
-      .valueChanges.pipe(takeUntil(this.unsubscribeSubject))
+      .valueChanges.pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((tags: Tag[]) => {
         const newTag = tags.find(({ id }) => {
           return id === undefined;
@@ -217,7 +215,7 @@ export class GfHoldingDetailDialogComponent implements OnDestroy, OnInit {
               switchMap(() => {
                 return this.userService.get(true);
               }),
-              takeUntil(this.unsubscribeSubject)
+              takeUntilDestroyed(this.destroyRef)
             )
             .subscribe();
         } else {
@@ -227,7 +225,7 @@ export class GfHoldingDetailDialogComponent implements OnDestroy, OnInit {
               dataSource: this.data.dataSource,
               symbol: this.data.symbol
             })
-            .pipe(takeUntil(this.unsubscribeSubject))
+            .pipe(takeUntilDestroyed(this.destroyRef))
             .subscribe();
         }
       });
@@ -236,32 +234,21 @@ export class GfHoldingDetailDialogComponent implements OnDestroy, OnInit {
       .fetchAccounts({
         filters
       })
-      .pipe(takeUntil(this.unsubscribeSubject))
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(({ accounts }) => {
         this.accounts = accounts;
 
         this.changeDetectorRef.markForCheck();
       });
 
-    this.dataService
-      .fetchActivities({
-        filters,
-        sortColumn: this.sortColumn,
-        sortDirection: this.sortDirection
-      })
-      .pipe(takeUntil(this.unsubscribeSubject))
-      .subscribe(({ activities }) => {
-        this.dataSource = new MatTableDataSource(activities);
-
-        this.changeDetectorRef.markForCheck();
-      });
+    this.fetchActivities(filters);
 
     this.dataService
       .fetchHoldingDetail({
         dataSource: this.data.dataSource,
         symbol: this.data.symbol
       })
-      .pipe(takeUntil(this.unsubscribeSubject))
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(
         ({
           activitiesCount,
@@ -524,7 +511,7 @@ export class GfHoldingDetailDialogComponent implements OnDestroy, OnInit {
       );
 
     this.userService.stateChanged
-      .pipe(takeUntil(this.unsubscribeSubject))
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((state) => {
         if (state?.user) {
           this.user = state.user;
@@ -544,6 +531,12 @@ export class GfHoldingDetailDialogComponent implements OnDestroy, OnInit {
           this.changeDetectorRef.markForCheck();
         }
       });
+  }
+
+  public onChangePage(page: PageEvent) {
+    this.pageIndex = page.pageIndex;
+
+    this.fetchActivities();
   }
 
   public onCloneActivity(aActivity: Activity) {
@@ -582,7 +575,7 @@ export class GfHoldingDetailDialogComponent implements OnDestroy, OnInit {
 
     this.dataService
       .postActivity(activity)
-      .pipe(takeUntil(this.unsubscribeSubject))
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(() => {
         this.router.navigate(
           internalRoutes.portfolio.subRoutes.activities.routerLink
@@ -599,7 +592,7 @@ export class GfHoldingDetailDialogComponent implements OnDestroy, OnInit {
 
     this.dataService
       .fetchExport({ activityIds })
-      .pipe(takeUntil(this.unsubscribeSubject))
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((data) => {
         downloadAsFile({
           content: data,
@@ -629,9 +622,21 @@ export class GfHoldingDetailDialogComponent implements OnDestroy, OnInit {
     this.dialogRef.close();
   }
 
-  public ngOnDestroy() {
-    this.unsubscribeSubject.next();
-    this.unsubscribeSubject.complete();
+  private fetchActivities(filters: Filter[] = this.getActivityFilters()) {
+    this.dataService
+      .fetchActivities({
+        filters,
+        skip: this.pageIndex * this.pageSize,
+        sortColumn: this.sortColumn,
+        sortDirection: this.sortDirection,
+        take: this.pageSize
+      })
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(({ activities }) => {
+        this.dataSource = new MatTableDataSource(activities);
+
+        this.changeDetectorRef.markForCheck();
+      });
   }
 
   private fetchMarketData() {
@@ -640,7 +645,7 @@ export class GfHoldingDetailDialogComponent implements OnDestroy, OnInit {
         dataSource: this.data.dataSource,
         symbol: this.data.symbol
       })
-      .pipe(takeUntil(this.unsubscribeSubject))
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(({ marketData }) => {
         this.marketDataItems = marketData;
 
@@ -655,5 +660,12 @@ export class GfHoldingDetailDialogComponent implements OnDestroy, OnInit {
 
         this.changeDetectorRef.markForCheck();
       });
+  }
+
+  private getActivityFilters(): Filter[] {
+    return [
+      { id: this.data.dataSource, type: 'DATA_SOURCE' },
+      { id: this.data.symbol, type: 'SYMBOL' }
+    ];
   }
 }
