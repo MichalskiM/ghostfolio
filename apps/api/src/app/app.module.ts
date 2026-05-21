@@ -8,7 +8,7 @@ import { ExchangeRateDataModule } from '@ghostfolio/api/services/exchange-rate-d
 import { I18nService } from '@ghostfolio/api/services/i18n/i18n.service';
 import { PrismaModule } from '@ghostfolio/api/services/prisma/prisma.module';
 import { PropertyModule } from '@ghostfolio/api/services/property/property.module';
-import { DataGatheringModule } from '@ghostfolio/api/services/queues/data-gathering/data-gathering.module';
+import { DataGatheringQueueModule } from '@ghostfolio/api/services/queues/data-gathering/data-gathering.module';
 import { PortfolioSnapshotQueueModule } from '@ghostfolio/api/services/queues/portfolio-snapshot/portfolio-snapshot.module';
 import {
   BULL_BOARD_ROUTE,
@@ -74,29 +74,25 @@ import { UserModule } from './user/user.module';
     AuthDeviceModule,
     AuthModule,
     BenchmarksModule,
-    ...(process.env.ENABLE_FEATURE_BULL_BOARD === 'true'
-      ? [
-          BullBoardModule.forRoot({
-            adapter: ExpressAdapter,
-            boardOptions: {
-              uiConfig: {
-                boardLogo: {
-                  height: 0,
-                  path: '',
-                  width: 0
-                },
-                boardTitle: 'Job Queues',
-                favIcon: {
-                  alternative: '/assets/favicon-32x32.png',
-                  default: '/assets/favicon-32x32.png'
-                }
-              }
-            },
-            middleware: BullBoardAuthMiddleware,
-            route: BULL_BOARD_ROUTE
-          })
-        ]
-      : []),
+    BullBoardModule.forRoot({
+      adapter: ExpressAdapter,
+      boardOptions: {
+        uiConfig: {
+          boardLogo: {
+            height: 0,
+            path: '',
+            width: 0
+          },
+          boardTitle: 'Job Queues',
+          favIcon: {
+            alternative: '/assets/favicon-32x32.png',
+            default: '/assets/favicon-32x32.png'
+          }
+        }
+      },
+      middleware: BullBoardAuthMiddleware,
+      route: BULL_BOARD_ROUTE
+    }),
     BullModule.forRoot({
       redis: {
         db: parseInt(process.env.REDIS_DB ?? '0', 10),
@@ -109,7 +105,7 @@ import { UserModule } from './user/user.module';
     ConfigModule.forRoot(),
     ConfigurationModule,
     CronModule,
-    DataGatheringModule,
+    DataGatheringQueueModule,
     DataProviderModule,
     EventEmitterModule.forRoot(),
     EventsModule,

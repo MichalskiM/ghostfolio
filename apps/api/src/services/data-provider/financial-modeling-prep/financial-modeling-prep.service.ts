@@ -1,5 +1,6 @@
 import { ConfigurationService } from '@ghostfolio/api/services/configuration/configuration.service';
 import { CryptocurrencyService } from '@ghostfolio/api/services/cryptocurrency/cryptocurrency.service';
+import { AssetProfileDelistedError } from '@ghostfolio/api/services/data-provider/errors/asset-profile-delisted.error';
 import {
   DataProviderInterface,
   GetAssetProfileParams,
@@ -23,7 +24,7 @@ import {
 } from '@ghostfolio/common/interfaces';
 import { MarketState } from '@ghostfolio/common/types';
 
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import {
   AssetClass,
   AssetSubClass,
@@ -44,7 +45,9 @@ import {
 import { uniqBy } from 'lodash';
 
 @Injectable()
-export class FinancialModelingPrepService implements DataProviderInterface {
+export class FinancialModelingPrepService
+  implements DataProviderInterface, OnModuleInit
+{
   private static countriesMapping = {
     'Korea (the Republic of)': 'South Korea',
     'Russian Federation': 'Russia',
@@ -57,7 +60,9 @@ export class FinancialModelingPrepService implements DataProviderInterface {
     private readonly configurationService: ConfigurationService,
     private readonly cryptocurrencyService: CryptocurrencyService,
     private readonly prismaService: PrismaService
-  ) {
+  ) {}
+
+  public onModuleInit() {
     this.apiKey = this.configurationService.get(
       'API_KEY_FINANCIAL_MODELING_PREP'
     );
@@ -118,7 +123,9 @@ export class FinancialModelingPrepService implements DataProviderInterface {
         ).then((res) => res.json());
 
         if (!assetProfile) {
-          throw new Error(`${symbol} not found`);
+          throw new AssetProfileDelistedError(
+            `No data found, ${symbol} (${this.getName()}) may be delisted`
+          );
         }
 
         const { assetClass, assetSubClass } =

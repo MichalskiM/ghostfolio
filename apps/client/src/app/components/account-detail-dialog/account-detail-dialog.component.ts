@@ -1,6 +1,9 @@
 import { GfInvestmentChartComponent } from '@ghostfolio/client/components/investment-chart/investment-chart.component';
 import { UserService } from '@ghostfolio/client/services/user/user.service';
-import { NUMERICAL_PRECISION_THRESHOLD_6_FIGURES } from '@ghostfolio/common/config';
+import {
+  DEFAULT_PAGE_SIZE,
+  NUMERICAL_PRECISION_THRESHOLD_6_FIGURES
+} from '@ghostfolio/common/config';
 import { CreateAccountBalanceDto } from '@ghostfolio/common/dtos';
 import { DATE_FORMAT, downloadAsFile } from '@ghostfolio/common/helper';
 import {
@@ -12,7 +15,6 @@ import {
 } from '@ghostfolio/common/interfaces';
 import { hasPermission, permissions } from '@ghostfolio/common/permissions';
 import { internalRoutes } from '@ghostfolio/common/routes/routes';
-import { OrderWithAccount } from '@ghostfolio/common/types';
 import { GfAccountBalancesComponent } from '@ghostfolio/ui/account-balances';
 import { GfActivitiesTableComponent } from '@ghostfolio/ui/activities-table';
 import { GfDialogFooterComponent } from '@ghostfolio/ui/dialog-footer';
@@ -21,13 +23,12 @@ import { GfHoldingsTableComponent } from '@ghostfolio/ui/holdings-table';
 import { DataService } from '@ghostfolio/ui/services';
 import { GfValueComponent } from '@ghostfolio/ui/value';
 
-import { CommonModule } from '@angular/common';
 import {
   ChangeDetectionStrategy,
   ChangeDetectorRef,
   Component,
   DestroyRef,
-  Inject,
+  inject,
   OnInit
 } from '@angular/core';
 import { CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
@@ -35,6 +36,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { MatButtonModule } from '@angular/material/button';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { MatDialogModule } from '@angular/material/dialog';
+import { PageEvent } from '@angular/material/paginator';
 import { Sort, SortDirection } from '@angular/material/sort';
 import { MatTableDataSource } from '@angular/material/table';
 import { MatTabsModule } from '@angular/material/tabs';
@@ -58,7 +60,6 @@ import { AccountDetailDialogParams } from './interfaces/interfaces';
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'd-flex flex-column h-100' },
   imports: [
-    CommonModule,
     GfAccountBalancesComponent,
     GfActivitiesTableComponent,
     GfDialogFooterComponent,
@@ -78,41 +79,44 @@ import { AccountDetailDialogParams } from './interfaces/interfaces';
   templateUrl: 'account-detail-dialog.html'
 })
 export class GfAccountDetailDialogComponent implements OnInit {
-  public accountBalances: AccountBalancesResponse['balances'];
-  public activities: OrderWithAccount[];
-  public activitiesCount: number;
-  public balance: number;
-  public balancePrecision = 2;
-  public currency: string;
-  public dataSource: MatTableDataSource<Activity>;
-  public dividendInBaseCurrency: number;
-  public dividendInBaseCurrencyPrecision = 2;
-  public equity: number;
-  public equityPrecision = 2;
-  public hasPermissionToDeleteAccountBalance: boolean;
-  public historicalDataItems: HistoricalDataItem[];
-  public holdings: PortfolioPosition[];
-  public interestInBaseCurrency: number;
-  public interestInBaseCurrencyPrecision = 2;
-  public isLoadingActivities: boolean;
-  public isLoadingChart: boolean;
-  public name: string;
-  public platformName: string;
-  public sortColumn = 'date';
-  public sortDirection: SortDirection = 'desc';
-  public totalItems: number;
-  public user: User;
-  public valueInBaseCurrency: number;
+  protected accountBalances: AccountBalancesResponse['balances'];
+  protected activitiesCount: number;
+  protected balance: number;
+  protected balancePrecision = 2;
+  protected currency: string | null;
+  protected dataSource: MatTableDataSource<Activity>;
+  protected dividendInBaseCurrency: number;
+  protected dividendInBaseCurrencyPrecision = 2;
+  protected equity: number | null;
+  protected equityPrecision = 2;
+  protected hasPermissionToDeleteAccountBalance: boolean;
+  protected historicalDataItems: HistoricalDataItem[];
+  protected holdings: PortfolioPosition[];
+  protected interestInBaseCurrency: number;
+  protected interestInBaseCurrencyPrecision = 2;
+  protected isLoadingActivities: boolean;
+  protected isLoadingChart: boolean;
+  protected name: string | null;
+  protected pageIndex = 0;
+  protected pageSize = DEFAULT_PAGE_SIZE;
+  protected platformName: string;
+  protected sortColumn = 'date';
+  protected sortDirection: SortDirection = 'desc';
+  protected totalItems: number;
+  protected user: User;
+  protected valueInBaseCurrency: number;
 
-  public constructor(
-    private changeDetectorRef: ChangeDetectorRef,
-    @Inject(MAT_DIALOG_DATA) public data: AccountDetailDialogParams,
-    private dataService: DataService,
-    private destroyRef: DestroyRef,
-    public dialogRef: MatDialogRef<GfAccountDetailDialogComponent>,
-    private router: Router,
-    private userService: UserService
-  ) {
+  protected readonly data = inject<AccountDetailDialogParams>(MAT_DIALOG_DATA);
+
+  private readonly changeDetectorRef = inject(ChangeDetectorRef);
+  private readonly dataService = inject(DataService);
+  private readonly destroyRef = inject(DestroyRef);
+  private readonly dialogRef =
+    inject<MatDialogRef<GfAccountDetailDialogComponent>>(MatDialogRef);
+  private readonly router = inject(Router);
+  private readonly userService = inject(UserService);
+
+  public constructor() {
     this.userService.stateChanged
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((state) => {
@@ -135,7 +139,22 @@ export class GfAccountDetailDialogComponent implements OnInit {
     this.initialize();
   }
 
-  public onCloneActivity(aActivity: Activity) {
+  protected onAddAccountBalance(accountBalance: CreateAccountBalanceDto) {
+    this.dataService
+      .postAccountBalance(accountBalance)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => {
+        this.initialize();
+      });
+  }
+
+  protected onChangePage(page: PageEvent) {
+    this.pageIndex = page.pageIndex;
+
+    this.fetchActivities();
+  }
+
+  protected onCloneActivity(aActivity: Activity) {
     this.router.navigate(
       internalRoutes.portfolio.subRoutes.activities.routerLink,
       {
@@ -146,20 +165,11 @@ export class GfAccountDetailDialogComponent implements OnInit {
     this.dialogRef.close();
   }
 
-  public onClose() {
+  protected onClose() {
     this.dialogRef.close();
   }
 
-  public onAddAccountBalance(accountBalance: CreateAccountBalanceDto) {
-    this.dataService
-      .postAccountBalance(accountBalance)
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe(() => {
-        this.initialize();
-      });
-  }
-
-  public onDeleteAccountBalance(aId: string) {
+  protected onDeleteAccountBalance(aId: string) {
     this.dataService
       .deleteAccountBalance(aId)
       .pipe(takeUntilDestroyed(this.destroyRef))
@@ -168,7 +178,7 @@ export class GfAccountDetailDialogComponent implements OnInit {
       });
   }
 
-  public onExport() {
+  protected onExport() {
     const activityIds = this.dataSource.data.map(({ id }) => {
       return id;
     });
@@ -180,7 +190,7 @@ export class GfAccountDetailDialogComponent implements OnInit {
         downloadAsFile({
           content: data,
           fileName: `ghostfolio-export-${this.name
-            .replace(/\s+/g, '-')
+            ?.replace(/\s+/g, '-')
             .toLowerCase()}-${format(
             parseISO(data.meta.date),
             'yyyyMMddHHmm'
@@ -190,14 +200,14 @@ export class GfAccountDetailDialogComponent implements OnInit {
       });
   }
 
-  public onSortChanged({ active, direction }: Sort) {
+  protected onSortChanged({ active, direction }: Sort) {
     this.sortColumn = active;
     this.sortDirection = direction;
 
     this.fetchActivities();
   }
 
-  public onUpdateActivity(aActivity: Activity) {
+  protected onUpdateActivity(aActivity: Activity) {
     this.router.navigate(
       internalRoutes.portfolio.subRoutes.activities.routerLink,
       {
@@ -206,6 +216,12 @@ export class GfAccountDetailDialogComponent implements OnInit {
     );
 
     this.dialogRef.close();
+  }
+
+  protected showValuesInPercentage() {
+    return (
+      this.data.hasImpersonationId || this.user?.settings?.isRestrictedView
+    );
   }
 
   private fetchAccount() {
@@ -283,8 +299,10 @@ export class GfAccountDetailDialogComponent implements OnInit {
     this.dataService
       .fetchActivities({
         filters: [{ id: this.data.accountId, type: 'ACCOUNT' }],
+        skip: this.pageIndex * this.pageSize,
         sortColumn: this.sortColumn,
-        sortDirection: this.sortDirection
+        sortDirection: this.sortDirection,
+        take: this.pageSize
       })
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(({ activities, count }) => {
@@ -324,7 +342,10 @@ export class GfAccountDetailDialogComponent implements OnInit {
       next: ({ accountBalances, portfolioPerformance }) => {
         this.accountBalances = accountBalances.balances;
 
-        if (portfolioPerformance.chart.length > 0) {
+        if (
+          portfolioPerformance.chart &&
+          portfolioPerformance.chart.length > 0
+        ) {
           this.historicalDataItems = portfolioPerformance.chart.map(
             ({ date, netWorth, netWorthInPercentage }) => ({
               date,
